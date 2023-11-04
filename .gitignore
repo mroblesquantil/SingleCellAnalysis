@@ -1,0 +1,6 @@
+# Folders
+data/*
+results/*
+
+# Cache
+*_pycache_*
