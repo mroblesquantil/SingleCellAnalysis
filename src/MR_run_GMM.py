@@ -1,6 +1,7 @@
 import argparse
 import os
 import pickle
+import warnings
 from time import time
 
 import h5py
@@ -10,11 +11,15 @@ import scanpy as sc
 import torch
 import torch.nn.functional as F
 from sklearn import metrics
+from sklearn.cluster import Birch
+from sklearn.metrics import (calinski_harabasz_score, davies_bouldin_score,
+                             silhouette_score)
 
 from MR_GMM import scDCC
 from preprocess import normalize, read_dataset
 from utils import cluster_acc
 
+warnings.filterwarnings('ignore')
 
 def set_hyperparameters():
    # setting the hyper parameters
@@ -38,8 +43,6 @@ def set_hyperparameters():
     parser.add_argument('--update_interval', default=1, type=int)
     parser.add_argument('--tol', default=0.001, type=float)
     parser.add_argument('--ae_weights', default=None)
-    parser.add_argument('--save_dir', default='results/scDCC_p0_1/')
-    parser.add_argument('--ae_weight_file', default='AE_weights_p0_1.pth.tar')
 
     args = parser.parse_args()
 
@@ -75,15 +78,15 @@ def format_normalize(x, y):
 
 def create_train_model(args):
   # Create saving directory
-  if not os.path.exists(args.save_dir):
-    os.makedirs(args.save_dir)
+  if not os.path.exists(args.path_results):
+    os.makedirs(args.path_results)
 
   sd = 2.5
   
   # Model
   model = scDCC(input_dim=adata.n_vars, z_dim=32, n_clusters=n_clusters, 
-              encodeLayer=[256, 64], decodeLayer=[64, 256], sigma=sd, gamma=args.gamma,
-              cov_identidad = args.cov_identidad, path = args.path_results).cuda()
+              encodeLayer=[256, 64], decodeLayer=[64, 256], sigma=sd,
+              path = args.path_results).cuda()
   
   print(str(model))
 
@@ -91,7 +94,7 @@ def create_train_model(args):
   t0 = time()
   if args.ae_weights is None:
       model.pretrain_autoencoder(x=adata.X, X_raw=adata.raw.X, size_factor=adata.obs.size_factors, 
-                              batch_size=args.batch_size, epochs=args.pretrain_epochs, ae_weights=args.ae_weight_file)
+                              batch_size=args.batch_size, epochs=args.pretrain_epochs)
   else:
       if os.path.isfile(args.ae_weights):
           print("==> loading checkpoint '{}'".format(args.ae_weights))
@@ -109,15 +112,15 @@ def second_training(args, model):
     t0 = time()
     
     # Second training: clustering loss + ZINB loss
-    y_pred,  mu, pi, cov, z, epochs, clustering_metrics, clustering_metrics_id, losses = model.fit(X=adata.X, X_raw=adata.raw.X, sf=adata.obs.size_factors,  
+    y_pred,  mu, pi, cov, z, epochs, clustering_metrics, losses = model.fit(X=adata.X, X_raw=adata.raw.X, sf=adata.obs.size_factors,  
                                     batch_size=args.batch_size,  num_epochs=args.maxiter,
-                                    update_interval=args.update_interval, tol=args.tol, save_dir=args.save_dir, lr = 0.001, y = y)
+                                    update_interval=args.update_interval, tol=args.tol, lr = 0.001, y = y)
 
     # Se guardan los resultados
-    pd.DataFrame(z.cpu().detach().numpy()).to_csv(args.path_results + 'Z.csv')
-    pd.DataFrame(mu.cpu().detach().numpy()).to_csv(args.path_results + 'Mu.csv')
-    pd.DataFrame(pi.cpu().detach().numpy()).to_csv(args.path_results + 'Pi.csv')
-    pd.DataFrame(cov.cpu().detach().numpy()).to_csv(args.path_results + 'DiagCov.csv')
+    pd.DataFrame(z.cpu().detach().numpy()).to_csv(args.path_results + 'Z.csv', index = None)
+    pd.DataFrame(mu.cpu().detach().numpy()).to_csv(args.path_results + 'Mu.csv', index = None)
+    pd.DataFrame(pi.cpu().detach().numpy()).to_csv(args.path_results + 'Pi.csv', index = None)
+    pd.DataFrame(cov.cpu().detach().numpy()).to_csv(args.path_results + 'DiagCov.csv', index = None)
 
     with open(args.path_results + '/prediccion.pickle', 'wb') as handle:
         pickle.dump(y_pred, handle)
@@ -126,18 +129,68 @@ def second_training(args, model):
 
     return y_pred
 
+
+def model_BIRCH(X: np.array, 
+                n_clusters: int,
+                threshold: list = [0.1, 0.5, 1.0, 2.0, 5.0, 10.0], 
+                branching_factor: list =  [10, 50, 100, 150]
+                ) -> tuple:
+    """
+    Trains a Birch model for the input data X by optimizing the hyperparameters threshold and branching factor.
+
+    input:
+    - X: array with data to cluster
+    - n_clusters: number of clusters 
+    - threshold: list of possible values of threshold for the Birch model
+    - branching_factor: list of possible branching factor values for the Birch model
+
+    output:
+    - best_model: a Birch Model of sklearn that maximized the silhouette score for the data
+    - params: tuple of 
+    """
+    # Hyperparameters to search
+    param_grid = {
+        'threshold': threshold,
+        'branching_factor': branching_factor
+    }
+
+    max_sil = -2
+    params = 0, 0 
+    best_model = None 
+    for t in param_grid['threshold']:
+        for b in param_grid['branching_factor']:
+            birch_model = Birch(n_clusters=n_clusters, threshold = t, branching_factor = b)
+            birch_model.fit(X)
+
+            labels = birch_model.predict(X)
+
+            sil = silhouette_score(X, labels)
+            if sil > max_sil:
+                max_sil = sil
+                params = t, b 
+                best_model = birch_model
+
+    return best_model, params, max_sil 
+
+def unsupervised_metrics(X, y_pred):
+    # Evaluación final de resultados: métricas comparando con los clusters reales
+    sil = np.round(silhouette_score(X, y_pred), 5)
+    chs = np.round(calinski_harabasz_score(X, y_pred), 5)
+    dbs = np.round(davies_bouldin_score(X, y_pred), 5)
+    print('Evaluating cells: SIL= %.4f, CHS= %.4f, DBS= %.4f' % (sil, chs, dbs))
+
 def supervised_metrics(y, y_pred, label_cell_indx):
     # Evaluación final de resultados: métricas comparando con los clusters reales
-    if not y is None:
-      eval_cell_y_pred = np.delete(y_pred, label_cell_indx)
-      eval_cell_y = np.delete(y, label_cell_indx)
-      acc = np.round(cluster_acc(eval_cell_y, eval_cell_y_pred), 5)
-      nmi = np.round(metrics.normalized_mutual_info_score(eval_cell_y, eval_cell_y_pred), 5)
-      ari = np.round(metrics.adjusted_rand_score(eval_cell_y, eval_cell_y_pred), 5)
-      print('Evaluating cells: ACC= %.4f, NMI= %.4f, ARI= %.4f' % (acc, nmi, ari))
-  
-      if not os.path.exists(args.label_cells_files):
-          np.savetxt(args.label_cells_files, label_cell_indx, fmt="%i")
+    assert y is not None 
+    eval_cell_y_pred = np.delete(y_pred, label_cell_indx)
+    eval_cell_y = np.delete(y, label_cell_indx)
+    acc = np.round(cluster_acc(eval_cell_y, eval_cell_y_pred), 5)
+    nmi = np.round(metrics.normalized_mutual_info_score(eval_cell_y, eval_cell_y_pred), 5)
+    ari = np.round(metrics.adjusted_rand_score(eval_cell_y, eval_cell_y_pred), 5)
+    print('Evaluating cells: ACC= %.4f, NMI= %.4f, ARI= %.4f' % (acc, nmi, ari))
+
+    if not os.path.exists(args.label_cells_files):
+        np.savetxt(args.label_cells_files, label_cell_indx, fmt="%i")
 
 if __name__ == "__main__":
     # Set hyperparameters
@@ -167,6 +220,23 @@ if __name__ == "__main__":
     model = create_train_model(args)   
     y_pred = second_training(args, model)
 
+    print('----> Unsupervised metrics for GMM Autoencoder:')
+    unsupervised_metrics(x, y_pred)
+
     # Supervised metrics
     if not y is None: 
+       print('\n----> Supervised metrics for GMM Autoencoder:')
+       supervised_metrics(y, y_pred, label_cell_indx)
+
+    # Birch
+    z = pd.read_csv(args.path_results + 'Z.csv').values
+    best_model, _, _ = model_BIRCH(X = z, n_clusters = n_clusters)
+    y_pred = best_model.predict(z)
+    
+    print('\n----> Unsupervised metrics for GMM Autoencoder + Birch:')
+    unsupervised_metrics(z, y_pred)
+
+    # Supervised metrics
+    if not y is None: 
+       print('\n----> Supervised metrics for GMM Autoencoder + Birch:')
        supervised_metrics(y, y_pred, label_cell_indx)

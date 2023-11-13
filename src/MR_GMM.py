@@ -32,7 +32,7 @@ def buildNetwork(layers, type, activation="relu"):
 
 class scDCC(nn.Module):
     def __init__(self, input_dim, z_dim, n_clusters, path, encodeLayer=[], decodeLayer=[], 
-            activation="relu", sigma=1., alpha=1., gamma=1., ml_weight=1., cl_weight=1.):
+            activation="relu", sigma=1., alpha=1., ml_weight=1., cl_weight=1.):
         super(scDCC, self).__init__()
         
         # Inicialización de valores para el autoencoder
@@ -41,7 +41,6 @@ class scDCC(nn.Module):
         self.activation = activation
         self.sigma = sigma
         self.alpha = alpha
-        self.gamma = gamma
         self.ml_weight = ml_weight
         self.cl_weight = cl_weight
         self.encoder = buildNetwork([input_dim]+encodeLayer, type="encode", activation=activation)
@@ -159,7 +158,7 @@ class scDCC(nn.Module):
         newfilename = os.path.join(filename, 'FTcheckpoint_%d.pth.tar' % index)
         torch.save(state, newfilename)
 
-    def pretrain_autoencoder(self, x, X_raw, size_factor, batch_size=256, lr=0.0001, epochs=400, ae_save=True, ae_weights='AE_weights.pth.tar'):
+    def pretrain_autoencoder(self, x, X_raw, size_factor, batch_size=256, lr=0.0001, epochs=400):
         use_cuda = torch.cuda.is_available()
         if use_cuda:
             self.cuda()
@@ -186,9 +185,6 @@ class scDCC(nn.Module):
             with open(self.path + '/pretrain_loss.pickle', 'wb') as handle:
                 pickle.dump(loss_s, handle)
 
-        torch.save({'ae_state_dict': self.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict()}, ae_weights)
-
         # Save the pretrained model 
         f = open(self.path + f'pretrained_model_with_{epoch}_epochs.pickle', 'wb')
         pickle.dump(self, f)
@@ -198,7 +194,7 @@ class scDCC(nn.Module):
         newfilename = os.path.join(filename, 'FTcheckpoint_%d.pth.tar' % index)
         torch.save(state, newfilename)
 
-    def fit(self, X, X_raw, sf, lr=0.1, batch_size=256, num_epochs=10, update_interval=1, tol=1e-3, save_dir='', y = None):
+    def fit(self, X, X_raw, sf, lr=0.1, batch_size=256, num_epochs=10, update_interval=1, tol=1e-3, y = None):
         '''X: tensor data'''
         
         use_cuda = torch.cuda.is_available()
@@ -234,7 +230,6 @@ class scDCC(nn.Module):
         num_batch = int(math.ceil(1.0*X.shape[0]/batch_size))
 
         clustering_metrics = {'ac': [], 'nmi': [], 'ari': []}
-        clustering_metrics_id = {'ac': [], 'nmi': [], 'ari': []}
         losses = {'zinb': [], 'gmm': []}
 
         for epoch in range(num_epochs):
@@ -256,7 +251,7 @@ class scDCC(nn.Module):
                 delta_label = np.sum(self.y_pred != self.y_pred_last).astype(np.float32) / num
                 
                 # save current model
-                if (epoch>0 and delta_label < tol) or epoch%100 == 0:
+                if epoch%50 == 0:
                     self.save_checkpoint({'epoch': epoch+1,
                             'state_dict': self.state_dict(),
                             'mu': self.mu,
@@ -308,10 +303,6 @@ class scDCC(nn.Module):
             losses['zinb'].append(recon_loss_val / num)
             losses['gmm'].append(cluster_loss_val / num)
 
-            
-            if epoch == num_epochs - 1: 
-                with open(f'{self.path}/DATOS_DESPUES_KMEANS{epoch}.pickle', 'wb') as handle:
-                    pickle.dump( latent, handle)
 
             if not y is None:
                 z = self.encodeBatch(X)        
@@ -325,23 +316,9 @@ class scDCC(nn.Module):
                 clustering_metrics['ac'].append(accuracy)
                 clustering_metrics['nmi'].append(nmi)
                 clustering_metrics['ari'].append(ari)
-
-                distr = self.find_probabilities_identity(z)
-                y_pred_identity = torch.argmax(distr.clone().detach(), dim=1).data.cpu().numpy()
-
-                accuracy = np.round(cluster_acc(y_true = y, y_pred = y_pred_identity), 5)
-                nmi = np.round(metrics.normalized_mutual_info_score(y, y_pred_identity), 5)
-                ari = np.round(metrics.adjusted_rand_score(y, y_pred_identity), 5)
-
-                clustering_metrics_id['ac'].append(accuracy)
-                clustering_metrics_id['nmi'].append(nmi)
-                clustering_metrics_id['ari'].append(ari)
         
             with open(self.path + '/clustering_metrics.pickle', 'wb') as handle:
                 pickle.dump( clustering_metrics, handle)
-
-            with open(self.path + '/clustering_metrics_id.pickle', 'wb') as handle:
-                pickle.dump( clustering_metrics_id, handle)
 
             with open(self.path + '/losses.pickle', 'wb') as handle:
                 pickle.dump( losses, handle)
@@ -352,4 +329,4 @@ class scDCC(nn.Module):
                 results_encoder = {'mean': meanbatch, 'sigma': dispbatch, 'pi': pibatch}
                 pickle.dump(results_encoder, handle)
 
-        return self.y_pred, self.mu, self.pi, self.diag_cov, z, epoch, clustering_metrics, clustering_metrics_id, losses
+        return self.y_pred, self.mu, self.pi, self.diag_cov, z, epoch, clustering_metrics, losses
