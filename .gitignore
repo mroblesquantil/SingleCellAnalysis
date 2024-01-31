@@ -2,4 +2,16 @@
 /results
 __pycache__
 
+*.pkl
+*.pickle
+*.csv
+*.h5
+*.tsv
+*.mtx
+*.png
+*.RData 
+*.bz2
+*.DS_Store
+
+
 Zinbmm_clustering.R

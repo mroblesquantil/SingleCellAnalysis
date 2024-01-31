@@ -108,7 +108,7 @@ def clustering(X, N, resolution, correlation_function, pca = True, n_components 
 
 def hyperparameter_exploration(X, y, params = {
     'N': [5+i*2 for i in range(10)],
-    'resolution': [0.1*i for i in range(1,11)], 
+    'resolution': [0.1*i for i in range(1,4)], 
     'correlation_function': [pearsonr]
     }, pca = True):
    
