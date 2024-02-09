@@ -16,6 +16,10 @@ from sklearn.metrics import (calinski_harabasz_score, davies_bouldin_score,
                              silhouette_score)
 
 from MR_GMM import scDCC
+
+import sys
+sys.path.append('../')
+
 from preprocess import normalize, read_dataset
 from utils import cluster_acc
 
