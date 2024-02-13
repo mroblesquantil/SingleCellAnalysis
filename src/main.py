@@ -25,7 +25,9 @@ def read_file(input_file: str)-> sc.AnnData:
         assert 'X' in file.keys() and 'Y' in file.keys()
 
         X = np.array(file['X'])
+        X = X.astype(np.float64)
         y = np.array(file['Y'])
+        y = y.astype(np.float64)
 
     adata = sc.AnnData(X, dtype=X.dtype)
     adata.obs['Group'] = y
@@ -40,25 +42,46 @@ def create_distribution_plots(adata: sc.AnnData, results_path: str)-> None:
     - adata: AnnData with counts and clusters information
     - results_path: Path to save the plots
     """ 
-    plot_counts_per_cell(adata)
-    plt.savefig(results_path + '/counts_per_cell.png', bbox_inches='tight')
-    plt.close()
+    try:
+        plot_counts_per_cell(adata)
+        plt.savefig(results_path + '/counts_per_cell.png', bbox_inches='tight')
+        plt.close()
 
-    plot_counts_per_gene(adata)
-    plt.savefig(results_path + '/counts_per_gene.png', bbox_inches='tight')
-    plt.close()
+    except:
+        print('---------> pass')
+        pass
 
-    plot_general_counts(adata)
-    plt.savefig(results_path + '/counts_distribution.png', bbox_inches='tight')
-    plt.close()
+    try:
+        plot_counts_per_gene(adata)
+        plt.savefig(results_path + '/counts_per_gene.png', bbox_inches='tight')
+        plt.close()
+    except:
+        print('---------> pass')
+        pass
 
-    plot_heat_map_genes(adata)
-    plt.savefig(results_path + '/heat_map_gene_counts.png', bbox_inches='tight')
-    plt.close()
+    try:
+        plot_general_counts(adata)
+        plt.savefig(results_path + '/counts_distribution.png', bbox_inches='tight')
+        plt.close()
+    except:
+        print('---------> pass')
+        pass
 
-    plot_distribution_clusters(adata)
-    plt.savefig(results_path + '/clusters_distribution.png', bbox_inches='tight')
-    plt.close()
+    try:
+        plot_heat_map_genes(adata)
+        plt.savefig(results_path + '/heat_map_gene_counts.png', bbox_inches='tight')
+        plt.close()
+    except:
+        print('---------> pass')
+        pass
+
+    try:
+        plot_distribution_clusters(adata)
+        plt.savefig(results_path + '/clusters_distribution.png', bbox_inches='tight')
+        plt.close()
+    except:
+        print('---------> pass')
+        pass
 
     print('\n-- Se guardaron las imagenes de distribuciones')
 
@@ -85,12 +108,16 @@ if __name__ == '__main__':
     adata = read_file(args.input_file)
     
     name = args.input_file.split('/')[-1].split('.')[0]
-    results_path = '../results/' + name +'/' 
+    results_path = '../results_exploration/' + name +'/' 
     if not os.path.exists(results_path):
         os.makedirs(results_path)
     
     create_distribution_plots(adata, results_path)
-    create_top10_distribution_plots(adata, results_path)
+    try:
+        create_top10_distribution_plots(adata, results_path)
+    except:
+        print('---------> pass')
+        pass 
 
 
 

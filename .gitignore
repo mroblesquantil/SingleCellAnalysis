@@ -1,6 +1,14 @@
 # Folders
 data/*
-results/*
+results_exploration/*
 
 # Cache
 *_pycache_*
+
+# Datos
+Datos de prueba/*
+*.pickle
+.DS*
+*.png
+*.bz2
+*.csv

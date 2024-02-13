@@ -67,6 +67,8 @@ def plot_counts_per_gene(adata: sc.AnnData,
     - fig: figure with joint plot of the AnnData
     """
     fig = plt.Figure()
+    print(adata.X.shape, adata.obs.shape)
+
     sc.pp.calculate_qc_metrics(adata, inplace=True)
 
     if xlim == None:
