@@ -12,6 +12,6 @@ __pycache__
 *.RData 
 *.bz2
 *.DS_Store
-
+*.tar
 
 Zinbmm_clustering.R
