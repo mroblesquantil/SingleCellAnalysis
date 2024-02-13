@@ -4,9 +4,9 @@
 library(SymSim)
 
 # Simular una población
-ngenes <- 500
-ncells_total <- 250
-min_popsize <- 30
+ngenes <- 750
+ncells_total <- 500
+min_popsize <- 40
 #true_counts_res <- SimulateTrueCounts(ncells_total=ncells_total, ngenes=ngenes, evf_type="one.population", Sigma=0.4, randseed=0)
 
 # Este tipo de dato tiene 
@@ -44,5 +44,5 @@ tsne_UMI_counts[[2]]
 X <- data.frame(observed_counts$counts)
 y <- observed_counts$cell_meta["pop"]
 
-write.matrix(X,file="conteos_symsim_500_250_3.csv")
-write.matrix(y,file="clusters_symsim_500_250_3.csv")
+write.matrix(X,file="conteos_symsim_750_500_3.csv")
+write.matrix(y,file="clusters_symsim_750_500_3.csv")
