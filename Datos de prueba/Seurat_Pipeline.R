@@ -6,8 +6,10 @@ library(dplyr)
 library("rhdf5")
 library(tidyverse)
 
-path_folder <- "generados/zi_negative_binomial_dim10000/hg19/"
-path_output <- "generados/zi_negative_binomial_dim10000/resultados/clusters.csv"
+setwd("/Users/melissa/Documents/Tesis/SingleCellAnalysis/Datos de prueba")
+
+path_folder <- "generados/symsim_formato_seurat/clusters_symsim_1000_400_5/hg19/"
+path_output <- "resultados_symsim_seurat/resultados_symsim_1000_400_5.csv"
 
 print_genes_cells <- function(seurat_obj){
   # Obtener el número de características (genes)
@@ -95,7 +97,7 @@ ElbowPlot(pbmc)
 
 
 pbmc <- FindNeighbors(pbmc, dims = 1:10)
-pbmc <- FindClusters(pbmc, resolution = 2.672283915)
+pbmc <- FindClusters(pbmc)
 pbmc <- RunUMAP(pbmc, dims = 1:10)
 
 DimPlot(pbmc, reduction = "umap")
